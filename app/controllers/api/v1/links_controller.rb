@@ -6,34 +6,61 @@ class Api::V1::LinksController < ApplicationController
     return render json: { error: 'URL is required' }, status: :bad_request unless url.present?
 
     short_code = SecureRandom.alphanumeric(6)
-    link = Link.create!(original_url: url, short_code: short_code, click_count: 0)
 
-    render json: {
-      short_url: request.base_url + "/api/v1/#{link.short_code}",
-      stats_url: request.base_url + "/api/v1/#{link.short_code}/stats",
-      qr_code_url: request.base_url + "/api/v1/#{link.short_code}/qr"
-    }
+    link = Link.new(
+      original_url: url,
+      short_code: short_code,
+      click_count: 0,
+      expires_at: params[:expires_at]
+    )
+
+    # Optional password protection
+    link.password = params[:password] if params[:password].present?
+
+    if link.save
+      render json: {
+        short_url: request.base_url + "/api/v1/#{link.short_code}",
+        stats_url: request.base_url + "/api/v1/#{link.short_code}/stats",
+        expires_at: link.expires_at,
+        password_protected: link.password_digest.present?
+      }
+    else
+      render json: { error: link.errors.full_messages }, status: :unprocessable_entity
+    end
   end
 
   def redirect
     link = Link.find_by(short_code: params[:short_code])
     return render json: { error: 'Not found' }, status: :not_found unless link
 
+    # Check expiration
+    if link.expires_at.present? && Time.current > link.expires_at
+      return render json: { error: 'Link has expired' }, status: :gone
+    end
+
+    # Check password
+    if link.password_digest.present?
+      if params[:password].blank?
+        return render json: { error: 'Password required' }, status: :unauthorized
+      end
+
+      unless link.authenticate(params[:password])
+        return render json: { error: 'Invalid password' }, status: :unauthorized
+      end
+    end
+
     link.increment!(:click_count)
 
-    geo_data = fetch_location(request.remote_ip)
-
-    # Storing geo location data if available
     Click.create!(
       link: link,
       ip: request.remote_ip,
       referrer: request.referer,
       user_agent: request.user_agent,
-      city: geo_data[:city],
-      region: geo_data[:region],
-      country: geo_data[:country],
-      lat: geo_data[:lat],
-      lon: geo_data[:lon]
+      city: fetch_location(request.remote_ip)[:city],
+      region: fetch_location(request.remote_ip)[:region],
+      country: fetch_location(request.remote_ip)[:country],
+      lat: fetch_location(request.remote_ip)[:lat],
+      lon: fetch_location(request.remote_ip)[:lon]
     )
 
     redirect_to link.original_url, allow_other_host: true
@@ -59,6 +86,7 @@ class Api::V1::LinksController < ApplicationController
   def stats
     link = Link.find_by(short_code: params[:short_code])
     return render json: { error: 'Not found' }, status: :not_found unless link
+    return unless authenticate_link(link)
 
     clicks = link.clicks.order(created_at: :desc).limit(20)
 
@@ -81,6 +109,10 @@ class Api::V1::LinksController < ApplicationController
   end 
 
   def qr_code
+    link = Link.find_by(short_code: params[:short_code])
+    return render plain: "Not found", status: :not_found unless link
+    return unless authenticate_link(link)
+
     begin
       qr = RQRCode::QRCode.new(request.original_url)
 
@@ -100,6 +132,21 @@ class Api::V1::LinksController < ApplicationController
     rescue StandardError => e
       render json: { error: e.message }, status: :unprocessable_entity
     end
+  end
+
+  private
+
+  def authenticate_link(link)
+    if link.password_digest.present?
+      if params[:password].blank?
+        render json: { error: 'Password required' }, status: :unauthorized and return false
+      end
+
+      unless link.authenticate(params[:password])
+        render json: { error: 'Invalid password' }, status: :unauthorized and return false
+      end
+    end
+    true
   end
 end
 

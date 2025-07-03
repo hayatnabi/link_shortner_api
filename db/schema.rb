@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_07_03_065222) do
+ActiveRecord::Schema[8.0].define(version: 2025_07_03_092220) do
   create_table "clicks", force: :cascade do |t|
     t.integer "link_id", null: false
     t.string "ip"
@@ -32,6 +32,8 @@ ActiveRecord::Schema[8.0].define(version: 2025_07_03_065222) do
     t.integer "click_count"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "password_digest"
+    t.datetime "expires_at"
   end
 
   add_foreign_key "clicks", "links"
