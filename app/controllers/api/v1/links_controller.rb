@@ -1,3 +1,5 @@
+require 'rqrcode'
+
 class Api::V1::LinksController < ApplicationController
   def create
     url = params[:url]
@@ -8,7 +10,8 @@ class Api::V1::LinksController < ApplicationController
 
     render json: {
       short_url: request.base_url + "/api/v1/#{link.short_code}",
-      stats_url: request.base_url + "/api/v1/#{link.short_code}/stats"
+      stats_url: request.base_url + "/api/v1/#{link.short_code}/stats",
+      qr_code_url: request.base_url + "/api/v1/#{link.short_code}/qr"
     }
   end
 
@@ -19,7 +22,7 @@ class Api::V1::LinksController < ApplicationController
     link.increment!(:click_count)
 
     geo_data = fetch_location(request.remote_ip)
-    
+
     # Storing geo location data if available
     Click.create!(
       link: link,
@@ -75,6 +78,28 @@ class Api::V1::LinksController < ApplicationController
         }
       end
     }
+  end 
+
+  def qr_code
+    begin
+      qr = RQRCode::QRCode.new(request.original_url)
+
+      png = qr.as_png(
+        bit_depth: 1,
+        border_modules: 4,
+        color_mode: ChunkyPNG::COLOR_GRAYSCALE,
+        color: 'black',
+        file: nil,
+        fill: 'white',
+        module_px_size: 6,
+        resize_exactly_to: false,
+        size: 240
+      )
+
+      send_data png.to_s, type: 'image/png', disposition: 'inline'
+    rescue StandardError => e
+      render json: { error: e.message }, status: :unprocessable_entity
+    end
   end
 end
 
