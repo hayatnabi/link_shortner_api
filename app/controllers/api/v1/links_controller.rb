@@ -18,14 +18,39 @@ class Api::V1::LinksController < ApplicationController
 
     link.increment!(:click_count)
 
+    geo_data = fetch_location(request.remote_ip)
+    
+    # Storing geo location data if available
     Click.create!(
       link: link,
       ip: request.remote_ip,
       referrer: request.referer,
-      user_agent: request.user_agent
+      user_agent: request.user_agent,
+      city: geo_data[:city],
+      region: geo_data[:region],
+      country: geo_data[:country],
+      lat: geo_data[:lat],
+      lon: geo_data[:lon]
     )
 
     redirect_to link.original_url, allow_other_host: true
+  end
+
+  def fetch_location(ip)
+    ip = "8.8.8.8" if ip == "::1" || ip == "127.0.0.1"  # Use Google's public DNS for testing
+
+    begin
+      res = HTTParty.get("https://ip-api.com/json/#{ip}")
+      return {
+        city: res["city"],
+        region: res["regionName"],
+        country: res["country"],
+        lat: res["lat"],
+        lon: res["lon"]
+      }
+    rescue
+      {}
+    end
   end
 
   def stats
@@ -43,6 +68,9 @@ class Api::V1::LinksController < ApplicationController
           ip: c.ip,
           referrer: c.referrer,
           user_agent: c.user_agent,
+          location: "#{c.city}, #{c.region}, #{c.country}",
+          lat: c.lat,
+          lon: c.lon,
           time: c.created_at
         }
       end

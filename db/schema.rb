@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_07_03_061143) do
+ActiveRecord::Schema[8.0].define(version: 2025_07_03_065222) do
   create_table "clicks", force: :cascade do |t|
     t.integer "link_id", null: false
     t.string "ip"
@@ -18,6 +18,11 @@ ActiveRecord::Schema[8.0].define(version: 2025_07_03_061143) do
     t.string "user_agent"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "city"
+    t.string "country"
+    t.string "region"
+    t.float "lat"
+    t.float "lon"
     t.index ["link_id"], name: "index_clicks_on_link_id"
   end
 
